@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Mi Ubicación</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background: #0f172a;
+      color: #e2e8f0;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    header {
+      background: linear-gradient(135deg, #1e3a8a, #3b82f6);
+      padding: 16px 24px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.4);
+    }
+    header .icon { font-size: 28px; }
+    header h1 { font-size: 20px; font-weight: 700; }
+    header p { font-size: 12px; opacity: 0.8; }
+    #map {
+      flex: 1;
+      width: 100%;
+    }
+    #info-panel {
+      background: #1e293b;
+      padding: 16px 24px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 16px;
+      justify-content: space-around;
+      border-top: 1px solid #334155;
+    }
+    .info-card {
+      text-align: center;
+      min-width: 100px;
+    }
+    .info-card .label {
+      font-size: 11px;
+      color: #94a3b8;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .info-card .value {
+      font-size: 15px;
+      font-weight: 600;
+      color: #38bdf8;
+      margin-top: 4px;
+    }
+    #btn-locate {
+      background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+      color: white;
+      border: none;
+      padding: 12px 28px;
+      border-radius: 8px;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: transform 0.1s, opacity 0.2s;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 0 auto 8px;
+    }
+    #btn-locate:hover { opacity: 0.9; transform: scale(1.02); }
+    #status {
+      text-align: center;
+      font-size: 13px;
+      color: #94a3b8;
+      padding: 8px;
+    }
+    .pulse {
+      display: inline-block;
+      width: 10px; height: 10px;
+      border-radius: 50%;
+      background: #22c55e;
+      margin-right: 6px;
+      animation: pulse 1.5s infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.5; transform: scale(1.4); }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="icon">📍</div>
+  <div>
+    <h1>Mi Ubicación</h1>
+    <p>Localización en tiempo real vía GPS</p>
+  </div>
+</header>
+
+<div id="map"></div>
+
+<div id="info-panel">
+  <div style="width:100%; text-align:center;">
+    <button id="btn-locate" onclick="locateMe()">
+      📡 Obtener mi ubicación
+    </button>
+    <div id="status">Presiona el botón para comenzar</div>
+  </div>
+  <div class="info-card">
+    <div class="label">Latitud</div>
+    <div class="value" id="lat">--</div>
+  </div>
+  <div class="info-card">
+    <div class="label">Longitud</div>
+    <div class="value" id="lng">--</div>
+  </div>
+  <div class="info-card">
+    <div class="label">Precisión</div>
+    <div class="value" id="acc">--</div>
+  </div>
+  <div class="info-card">
+    <div class="label">Actualizado</div>
+    <div class="value" id="time">--</div>
+  </div>
+</div>
+
+<script>
+  const map = L.map('map').setView([-0.2299, -78.5249], 13);
+
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '© OpenStreetMap contributors'
+  }).addTo(map);
+
+  let marker = null;
+  let circle = null;
+  let watchId = null;
+
+  function locateMe() {
+    if (!navigator.geolocation) {
+      setStatus('❌ Tu navegador no soporta geolocalización');
+      return;
+    }
+    setStatus('<span class="pulse"></span> Obteniendo ubicación...');
+    document.getElementById('btn-locate').disabled = true;
+
+    if (watchId) navigator.geolocation.clearWatch(watchId);
+
+    watchId = navigator.geolocation.watchPosition(onSuccess, onError, {
+      enableHighAccuracy: true,
+      timeout: 15000,
+      maximumAge: 5000
+    });
+  }
+
+  function onSuccess(pos) {
+    const { latitude: lat, longitude: lng, accuracy } = pos.coords;
+    const now = new Date().toLocaleTimeString('es-EC');
+
+    // Actualizar info
+    document.getElementById('lat').textContent = lat.toFixed(6);
+    document.getElementById('lng').textContent = lng.toFixed(6);
+    document.getElementById('acc').textContent = accuracy.toFixed(0) + ' m';
+    document.getElementById('time').textContent = now;
+    setStatus(`<span class="pulse"></span> Ubicación activa · Precisión: ${accuracy.toFixed(0)} m`);
+
+    // Mover mapa
+    map.setView([lat, lng], 17);
+
+    // Marcador
+    if (marker) {
+      marker.setLatLng([lat, lng]);
+      circle.setLatLng([lat, lng]).setRadius(accuracy);
+    } else {
+      marker = L.marker([lat, lng]).addTo(map)
+        .bindPopup('<b>📍 Estás aquí</b><br>Lat: ' + lat.toFixed(5) + '<br>Lng: ' + lng.toFixed(5))
+        .openPopup();
+      circle = L.circle([lat, lng], {
+        radius: accuracy,
+        color: '#3b82f6',
+        fillColor: '#3b82f6',
+        fillOpacity: 0.15,
+        weight: 2
+      }).addTo(map);
+    }
+
+    document.getElementById('btn-locate').disabled = false;
+    document.getElementById('btn-locate').textContent = '🔄 Actualizar';
+  }
+
+  function onError(err) {
+    let msg = 'Error desconocido';
+    if (err.code === 1) msg = '❌ Permiso denegado. Activa el GPS en tu navegador.';
+    if (err.code === 2) msg = '❌ Posición no disponible. Verifica tu GPS.';
+    if (err.code === 3) msg = '❌ Tiempo de espera agotado. Intenta de nuevo.';
+    setStatus(msg);
+    document.getElementById('btn-locate').disabled = false;
+  }
+
+  function setStatus(html) {
+    document.getElementById('status').innerHTML = html;
+  }
+</script>
+
+</body>
+</html>
